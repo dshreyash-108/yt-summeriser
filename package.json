@@ -1,8 +1,17 @@
 {
+  "name": "yt-transcript-api",
+  "version": "1.0.0",
+  "description": "YouTube Transcript Fetching API",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^5.1.0",
-    "youtube-transcript": "^1.2.1",
-    "yt-transcript": "^0.0.2"
+    "youtube-transcript": "^1.2.1"
   }
 }
