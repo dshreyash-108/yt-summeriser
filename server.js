@@ -1,36 +1,56 @@
 const express = require('express');
-const { YoutubeTranscript } = require('youtube-transcript');
-const app = express();
 const cors = require('cors');
+const { YoutubeTranscript } = require('youtube-transcript');
 
+const app = express();
+app.use(cors());
 app.use(express.json());
 
-app.use(cors());
+const transcriptCache = {}; // In-memory cache
+
+// Utility to extract video ID
+function extractVideoId(url) {
+  const match = url.match(/(?:v=|\/)([0-9A-Za-z_-]{11})/);
+  return match ? match[1] : null;
+}
 
 app.post('/transcript', async (req, res) => {
+  const videoUrl = req.body.videoUrl;
+
+  if (!videoUrl) {
+    return res.status(400).json({ error: 'Missing videoUrl in request body.' });
+  }
+
+  const videoId = extractVideoId(videoUrl);
+  if (!videoId) {
+    return res.status(400).json({ error: 'Invalid YouTube URL.' });
+  }
+
+  // Return from cache if available
+  if (transcriptCache[videoId]) {
+    return res.json({ transcript: transcriptCache[videoId], cached: true });
+  }
+
   try {
-    const { videoUrl } = req.body;
-
-    if (!videoUrl) {
-      return res.status(400).json({ error: 'Missing videoUrl' });
-    }
-
-    const url = new URL(videoUrl);
-    const videoId = url.searchParams.get('v');
-
-    if (!videoId) {
-      return res.status(400).json({ error: 'Invalid YouTube URL' });
-    }
-
     const transcript = await YoutubeTranscript.fetchTranscript(videoId);
-    const fullText = transcript.map(t => t.text).join(' ');
-
-    res.json({ transcript: fullText });
+    const fullText = transcript.map(item => item.text).join(' ');
+    transcriptCache[videoId] = fullText;
+    return res.json({ transcript: fullText });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Failed to fetch transcript', details: error.message });
+    console.error(`[ERROR] Transcript fetch failed: ${error.message}`);
+
+    if (error.message.includes('captcha') || error.message.includes('TooManyRequest')) {
+      return res.status(429).json({
+        error: 'YouTube is rate-limiting this service. Try again later.',
+        transcript: '[TRANSCRIPT UNAVAILABLE DUE TO RATE LIMIT]',
+      });
+    }
+
+    return res.status(500).json({ error: error.message });
   }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
